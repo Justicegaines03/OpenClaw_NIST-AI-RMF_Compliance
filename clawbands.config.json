@@ -1,0 +1,80 @@
+{
+  "version": "1.0",
+  "defaultDecision": "deny",
+  "policies": [
+    {
+      "id": "b2b-sales-hitl",
+      "description": "Enforce human approval for all B2B sales operations.",
+      "scope": {
+        "domain": "b2b_sales",
+        "operations": [
+          "lead.create",
+          "lead.enrich",
+          "outreach.email.send",
+          "outreach.sms.send",
+          "quote.create",
+          "quote.send",
+          "contract.create",
+          "contract.send",
+          "crm.contact.update",
+          "crm.deal.update"
+        ]
+      },
+      "authorizedUsersEnv": "AUTHORIZED_USERS",
+      "enforcement": {
+        "mode": "human_in_the_loop_required",
+        "onMissingApproval": "deny",
+        "onExpiredApproval": "deny",
+        "onVerificationError": "deny"
+      },
+      "approval": {
+        "type": "signed_token",
+        "provider": "pai-api",
+        "baseUrlEnv": "PAI_API_BASE_URL",
+        "tokenEnv": "PAI_API_TOKEN",
+        "verifyEndpointEnv": "HITL_APPROVAL_ENDPOINT",
+        "requestFields": [
+          "operation_id",
+          "operation_type",
+          "actor_email",
+          "payload_hash",
+          "requested_at",
+          "approval_token"
+        ],
+        "responseFields": [
+          "approved",
+          "approval_id",
+          "approver",
+          "expires_at",
+          "reason"
+        ]
+      },
+      "audit": {
+        "requiredFields": [
+          "request_id",
+          "actor_email",
+          "operation_type",
+          "approval_id",
+          "decision",
+          "timestamp"
+        ]
+      }
+    }
+  ],
+  "runtimeGuards": {
+    "blockedCommandPatterns": [
+      "\\brm\\s+-rf\\b",
+      "\\bcurl\\b[^\\n|]*\\|",
+      "\\bgit\\s+push\\s+--force\\b"
+    ],
+    "blockedToolScopes": [
+      "mcp.admin",
+      "mcp.remote.exec"
+    ]
+  },
+  "untrustedContent": {
+    "wrapWithTags": true,
+    "startTag": "[UNTRUSTED_CONTENT]",
+    "endTag": "[/UNTRUSTED_CONTENT]"
+  }
+}

@@ -1,0 +1,77 @@
+services:
+  openclaw-gateway:
+    environment:
+      OPENCLAW_GATEWAY_TOKEN: ${GATEWAY_AUTH_TOKEN:?Set GATEWAY_AUTH_TOKEN in .env}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?Set ANTHROPIC_API_KEY in .env}
+      AUTHORIZED_USERS: ${AUTHORIZED_USERS:?Set AUTHORIZED_USERS in .env}
+      PAI_API_BASE_URL: ${PAI_API_BASE_URL:-http://pai-api:8080}
+      PAI_API_TOKEN: ${PAI_API_TOKEN:-}
+      HITL_REQUIRED: ${HITL_REQUIRED:-true}
+      HITL_APPROVAL_ENDPOINT: ${HITL_APPROVAL_ENDPOINT:-/v1/approvals/verify}
+      CLAWBANDS_CONFIG_PATH: ${CLAWBANDS_CONFIG_PATH:-/home/node/.openclaw/clawbands.config.json}
+      HTTP_PROXY: http://egress-proxy:3128
+      HTTPS_PROXY: http://egress-proxy:3128
+      NO_PROXY: localhost,127.0.0.1,pai-api,openclaw-gateway,egress-proxy
+    volumes:
+      - ./clawbands.config.json:/home/node/.openclaw/clawbands.config.json:ro
+    depends_on:
+      egress-proxy:
+        condition: service_started
+    ports:
+      - "127.0.0.1:18789:18789"
+      - "127.0.0.1:18790:18790"
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp
+    networks:
+      - internal_only
+
+  openclaw-cli:
+    environment:
+      OPENCLAW_GATEWAY_TOKEN: ${GATEWAY_AUTH_TOKEN:?Set GATEWAY_AUTH_TOKEN in .env}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?Set ANTHROPIC_API_KEY in .env}
+      HTTP_PROXY: http://egress-proxy:3128
+      HTTPS_PROXY: http://egress-proxy:3128
+      NO_PROXY: localhost,127.0.0.1,pai-api,openclaw-gateway,egress-proxy
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp
+    networks:
+      - internal_only
+
+  egress-proxy:
+    image: ubuntu/squid:latest
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp
+      - /var/log/squid
+      - /var/spool/squid
+      - /run
+    volumes:
+      - ./security/proxy/squid.conf:/etc/squid/squid.conf:ro
+    command: ["squid", "-N", "-f", "/etc/squid/squid.conf"]
+    networks:
+      - internal_only
+      - egress_outbound
+
+networks:
+  internal_only:
+    name: internal_only
+    driver: bridge
+    internal: true
+  egress_outbound:
+    name: egress_outbound
+    driver: bridge
