@@ -46,4 +46,9 @@ if [ "${#format_files[@]}" -gt 0 ]; then
   "$RUN_NODE_TOOL" oxfmt --write -- "${format_files[@]}"
 fi
 
-git add -- "${files[@]}"
+# Some staged paths may collapse to ignored parent directories after tool-driven
+# rewrites during large merges. Fall back to tracked-file update mode so hooks
+# do not abort on ignored pathspec warnings.
+if ! git add -- "${files[@]}"; then
+  git add -u -- "${files[@]}"
+fi

@@ -1,5 +1,14 @@
-import { isDangerousHostEnvVarName, normalizeEnvVarKey } from "../infra/host-env-security.js";
+import {
+  isDangerousHostEnvOverrideVarName,
+  isDangerousHostEnvVarName,
+  normalizeEnvVarKey,
+} from "../infra/host-env-security.js";
+import { containsEnvVarReference } from "./env-substitution.js";
 import type { OpenClawConfig } from "./types.js";
+
+function isBlockedConfigEnvVar(key: string): boolean {
+  return isDangerousHostEnvVarName(key) || isDangerousHostEnvOverrideVarName(key);
+}
 
 function collectConfigEnvVarsByTarget(cfg?: OpenClawConfig): Record<string, string> {
   const envConfig = cfg?.env;
@@ -18,7 +27,7 @@ function collectConfigEnvVarsByTarget(cfg?: OpenClawConfig): Record<string, stri
       if (!key) {
         continue;
       }
-      if (isDangerousHostEnvVarName(key)) {
+      if (isBlockedConfigEnvVar(key)) {
         continue;
       }
       entries[key] = value;
@@ -36,7 +45,7 @@ function collectConfigEnvVarsByTarget(cfg?: OpenClawConfig): Record<string, stri
     if (!key) {
       continue;
     }
-    if (isDangerousHostEnvVarName(key)) {
+    if (isBlockedConfigEnvVar(key)) {
       continue;
     }
     entries[key] = value;
@@ -65,6 +74,13 @@ export function applyConfigEnvVars(
   const entries = collectConfigRuntimeEnvVars(cfg);
   for (const [key, value] of Object.entries(entries)) {
     if (env[key]?.trim()) {
+      continue;
+    }
+    // Skip values containing unresolved ${VAR} references — applyConfigEnvVars runs
+    // before env substitution, so these would pollute process.env with literal placeholders
+    // (e.g. process.env.OPENCLAW_GATEWAY_TOKEN = "${VAULT_TOKEN}") which downstream auth
+    // resolution would accept as valid credentials.
+    if (containsEnvVarReference(value)) {
       continue;
     }
     env[key] = value;
