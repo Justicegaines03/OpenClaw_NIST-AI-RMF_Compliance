@@ -207,6 +207,11 @@ Security boundary notes:
 For threat model + hardening guidance (including `openclaw security audit --deep` and `--fix`), see:
 
 - `https://docs.openclaw.ai/gateway/security`
+- Daniel Miessler Top 10 evidence baseline (operator-local record): `security/evidence/2026-03-08-daniel-miessler-top10-security-baseline.md`
+
+### Daniel Miessler Top 10 framing
+
+When this project references "Top 10 vulnerabilities" in hardening context, it refers to Daniel Miessler's framework (not OWASP Top 10) unless explicitly stated otherwise. Canonical local evidence for this mapping lives under `security/evidence/`.
 
 ### Tool filesystem hardening
 

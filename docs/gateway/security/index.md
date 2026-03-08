@@ -27,6 +27,9 @@ This page explains hardening **within that model**. It does not claim hostile mu
 
 See also: [Formal Verification (Security Models)](/security/formal-verification/)
 
+For local operator evidence using Daniel Miessler's Top 10 vulnerability framing
+(not OWASP Top 10), see `security/evidence/2026-03-08-daniel-miessler-top10-security-baseline.md`.
+
 Run this regularly (especially after changing config or exposing network surfaces):
 
 ```bash
