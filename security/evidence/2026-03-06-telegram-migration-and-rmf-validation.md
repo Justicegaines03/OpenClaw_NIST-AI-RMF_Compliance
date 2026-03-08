@@ -179,3 +179,43 @@ Recommended operator action:
 - Keep "ask before action" and least-privilege in your identity/system directives.
 - Keep Docker sandbox on for normal operation.
 
+## 9) PAI Baseline Hardening Applied
+
+The following files were updated in the PAI workspace (`/Users/justicegaines/.claude/context/projects/Personal_AI_Infrastructure`) to implement the requested next steps:
+
+- `IDENTITY.md` updated with Rovert identity, mission, and non-negotiables.
+- `USER.md` updated with Justice operating context and preferences.
+- `SOUL.md` updated to a security-first operating constitution.
+- `HEARTBEAT.md` configured with periodic health/security/evidence checks.
+- `BOOTSTRAP.md` deleted after initialization completion.
+- `MEMORY.md` created for long-term continuity and security priorities.
+- `memory/2026-03-06.md` created for daily audit trail logging.
+
+These updates streamline daily use while preserving the OpenClaw + PAI boundary model and hardening posture.
+
+## 10) Read-Only Assistant Mode Enabled (PAI Access)
+
+To allow secure PAI visibility without autonomous modification, tooling policy was adjusted:
+
+- Removed blanket filesystem group deny (`group:fs`) so read-style inspection can work.
+- Kept strong write/exec restrictions:
+  - `tools.deny` includes `write`, `edit`, `apply_patch`, `process`
+  - `tools.exec.security="deny"`
+  - `agents.defaults.sandbox.workspaceAccess="ro"`
+
+Verification commands:
+
+- `pnpm openclaw config get tools.deny`
+- `pnpm openclaw config get agents.defaults.sandbox.workspaceAccess`
+- `pnpm openclaw config get tools.exec.security`
+
+Operational note:
+
+- Restart gateway after policy changes for active sessions to pick up updated tool access.
+- Runtime alignment update:
+  - Set `agents.defaults.sandbox.workspaceAccess="rw"` so the active runtime mounts the real workspace path, while write/mutation tools remain denied by policy.
+
+Rollback (revert to stricter messaging-only mode):
+
+- Add `group:fs` back to `tools.deny`.
+
