@@ -1,0 +1,181 @@
+version: 1
+policy_name: rovert_repo_policy
+owner: justicegaines
+description: >
+  Policy for safe semantic context retrieval and gated file edits inside the
+  Personal AI Infrastructure workspace repository.
+
+scope:
+  repository_root: "."
+  follow_symlinks_within_repo: true
+  deny_symlink_targets_outside_repo: true
+  default_mode: read
+
+context_access:
+  mode: semantic_first
+  index:
+    enabled: true
+    provider: local
+    refresh_strategy: incremental_on_change
+    include:
+      - "**/*.md"
+      - "**/*.txt"
+      - "**/*.yaml"
+      - "**/*.yml"
+      - "**/*.json"
+      - "**/*.ts"
+      - "**/*.tsx"
+      - "**/*.js"
+      - "**/*.sh"
+    exclude:
+      - ".git/**"
+      - "node_modules/**"
+      - "dist/**"
+      - "coverage/**"
+      - "docs/zh-CN/**"
+      - "**/*.pem"
+      - "**/*.key"
+      - "**/*.p12"
+      - "**/*.pfx"
+      - "**/*.crt"
+      - "**/*.der"
+      - "**/*.kdbx"
+      - "**/.env"
+      - "**/.env.*"
+      - "**/secrets/**"
+      - "**/credentials/**"
+      - "**/*token*"
+      - "**/*secret*"
+  retrieval:
+    max_files_per_query: 8
+    max_snippet_chars_per_file: 2500
+    redact_potential_secrets: true
+    redact_patterns:
+      - "(?i)api[_-]?key\\s*[:=]\\s*['\\\"]?[a-z0-9_\\-]{16,}"
+      - "(?i)secret\\s*[:=]\\s*['\\\"]?.+"
+      - "(?i)token\\s*[:=]\\s*['\\\"]?.+"
+      - "(?i)password\\s*[:=]\\s*['\\\"]?.+"
+
+edit_access:
+  strategy: patch_only
+  allow_file_create: true
+  allow_file_update: true
+  allow_file_delete: false
+  allow_shell_write_commands: false
+  require_relative_repo_paths: true
+  max_files_per_patch: 20
+
+path_controls:
+  editable_allow:
+    - "README.md"
+    - "docs/**"
+    - "security/**"
+    - "skills/**"
+    - "scripts/**"
+    - "src/**"
+    - "extensions/**"
+    - "apps/**"
+    - "*.md"
+    - "*.yaml"
+    - "*.yml"
+    - "*.json"
+    - "*.ts"
+    - "*.tsx"
+    - "*.js"
+    - "*.sh"
+  editable_deny:
+    - ".git/**"
+    - "**/.env"
+    - "**/.env.*"
+    - "**/secrets/**"
+    - "**/credentials/**"
+    - "**/*.pem"
+    - "**/*.key"
+    - "**/*.p12"
+    - "**/*.pfx"
+    - "**/*.crt"
+    - "**/*.der"
+    - "**/*.kdbx"
+    - "appcast.xml"
+    - "package-lock.json"
+    - "pnpm-lock.yaml"
+    - "bun.lockb"
+    - "yarn.lock"
+    - "node_modules/**"
+  requires_explicit_approval:
+    - "SECURITY.md"
+    - "CHANGELOG.md"
+    - "docs/reference/RELEASING.md"
+    - "docs/platforms/mac/release.md"
+    - "src/security/**"
+    - ".github/workflows/**"
+
+approval:
+  levels:
+    - name: auto_apply
+      conditions:
+        - "all_files_in_editable_allow"
+        - "no_files_match_requires_explicit_approval"
+        - "all_validations_pass"
+    - name: confirm_apply
+      conditions:
+        - "any_file_matches_requires_explicit_approval"
+        - "or_any_validation_warn_or_fail"
+  human_confirmation:
+    show_full_diff: true
+    show_changed_file_list: true
+    require_yes_phrase: "approve rovert patch"
+
+validation_pipeline:
+  on_patch_proposed:
+    - "secret_scan"
+    - "policy_path_check"
+    - "forbidden_pattern_check"
+  on_patch_ready_to_apply:
+    - "pnpm format"
+    - "pnpm check"
+    - "pnpm build"
+  fallback_when_dependencies_missing:
+    - "pnpm install"
+    - "rerun_failed_command_once"
+  forbidden_patterns:
+    - "@ts-nocheck"
+    - "no-explicit-any"
+    - "git reset --hard"
+    - "git checkout --"
+    - "rm -rf /"
+    - "npm publish"
+
+git_controls:
+  allow_branch_switch: false
+  allow_force_push: false
+  allow_commit: true
+  commit_mode: scoped_only
+  require_commit_message_style: action_oriented
+  require_clean_patch_scope: true
+
+audit:
+  enabled: true
+  log_dir: "security/evidence/rovert-audit"
+  log_fields:
+    - timestamp
+    - user_request
+    - retrieved_context_files
+    - proposed_patch_files
+    - validation_results
+    - approval_level
+    - approver
+    - git_commit
+
+profiles:
+  default:
+    context_access: semantic_first
+    edit_access: patch_only
+    approval_level: confirm_apply
+  trusted_maintenance:
+    context_access: semantic_first
+    edit_access: patch_only
+    approval_level: auto_apply
+    constraints:
+      - "exclude_sensitive_paths_still_enforced"
+      - "validations_still_required"

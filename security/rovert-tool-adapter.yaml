@@ -1,0 +1,213 @@
+version: 1
+adapter_name: rovert_policy_adapter
+policy_file: security/rovert-policy.yaml
+description: >
+  Execution adapter that binds Rovert tool actions to policy checks,
+  approval gates, and validation commands for safe context retrieval
+  and controlled file editing.
+
+runtime_contract:
+  repository_root_required: true
+  relative_paths_only: true
+  deny_absolute_paths: true
+  deny_parent_traversal: true
+  require_request_id: true
+  require_actor_id: true
+
+tools:
+  search_code:
+    intent: semantic_context_discovery
+    input_schema:
+      required:
+        - query
+      optional:
+        - limit
+        - path_hint
+    pre_checks:
+      - load_policy
+      - enforce_scope
+      - enforce_context_include_exclude
+    execution:
+      index_mode: semantic_first
+      max_files: "policy.context_access.retrieval.max_files_per_query"
+      max_snippet_chars: "policy.context_access.retrieval.max_snippet_chars_per_file"
+    post_processing:
+      - redact_potential_secrets
+      - strip_denied_paths
+    outputs:
+      - request_id
+      - matched_files
+      - snippets
+      - redaction_summary
+
+  read_snippet:
+    intent: targeted_context_fetch
+    input_schema:
+      required:
+        - file
+      optional:
+        - start_line
+        - end_line
+    pre_checks:
+      - load_policy
+      - enforce_scope
+      - enforce_context_include_exclude
+      - deny_if_matches_editable_deny
+    execution:
+      max_snippet_chars: "policy.context_access.retrieval.max_snippet_chars_per_file"
+    post_processing:
+      - redact_potential_secrets
+    outputs:
+      - request_id
+      - file
+      - snippet
+      - redaction_summary
+
+  propose_patch:
+    intent: generate_patch_without_side_effects
+    input_schema:
+      required:
+        - change_request
+      optional:
+        - target_files
+    pre_checks:
+      - load_policy
+      - enforce_scope
+      - enforce_edit_allow_deny
+      - enforce_max_files_per_patch
+      - deny_forbidden_patterns_in_patch
+    execution:
+      mode: patch_only
+      side_effects: none
+    post_processing:
+      - run_check: secret_scan
+      - run_check: policy_path_check
+      - run_check: forbidden_pattern_check
+      - determine_approval_level
+    outputs:
+      - request_id
+      - patch
+      - changed_files
+      - approval_level
+      - check_results
+
+  apply_patch:
+    intent: gated_patch_application
+    input_schema:
+      required:
+        - patch
+      optional:
+        - commit
+    pre_checks:
+      - load_policy
+      - revalidate_patch
+      - enforce_edit_allow_deny
+      - enforce_no_delete_if_disabled
+      - require_human_confirmation_if_needed
+    execution:
+      apply_mode: atomic
+      rollback_on_failure: true
+    post_processing:
+      - run_cmd: pnpm format
+      - run_cmd: pnpm check
+      - run_cmd: pnpm build
+      - collect_results
+      - write_audit_entry
+    outputs:
+      - request_id
+      - applied
+      - changed_files
+      - validation_results
+      - audit_entry
+
+approval_logic:
+  auto_apply_when:
+    - all_files_in_editable_allow
+    - no_files_match_requires_explicit_approval
+    - all_validations_pass
+  confirm_apply_when:
+    - any_file_matches_requires_explicit_approval
+    - any_validation_warn_or_fail
+  confirmation_prompt_template: |
+    Rovert is requesting permission to apply a patch.
+    Request ID: {{request_id}}
+    Files: {{changed_files}}
+    Approval level: {{approval_level}}
+    Type exactly: approve rovert patch
+  required_yes_phrase: "approve rovert patch"
+
+path_resolution:
+  normalize:
+    - collapse_dot_segments
+    - trim_leading_slash
+  deny_patterns:
+    - "../"
+    - "/../"
+    - "~"
+  policy_backed_allow: "policy.path_controls.editable_allow"
+  policy_backed_deny: "policy.path_controls.editable_deny"
+
+validation_commands:
+  proposed_patch:
+    - name: secret_scan
+      kind: internal
+    - name: policy_path_check
+      kind: internal
+    - name: forbidden_pattern_check
+      kind: internal
+  pre_apply:
+    - name: pnpm format
+      kind: shell
+    - name: pnpm check
+      kind: shell
+    - name: pnpm build
+      kind: shell
+  dependency_fallback:
+    - name: pnpm install
+      kind: shell
+    - name: rerun_failed_command_once
+      kind: internal
+
+audit_contract:
+  enabled: true
+  destination: "policy.audit.log_dir"
+  required_fields:
+    - timestamp
+    - request_id
+    - actor_id
+    - tool
+    - user_request
+    - retrieved_context_files
+    - proposed_patch_files
+    - validation_results
+    - approval_level
+    - approver
+    - git_commit
+
+error_handling:
+  on_policy_violation:
+    action: deny
+    include_reason: true
+  on_validation_failure:
+    action: require_confirmation
+    include_failed_checks: true
+  on_apply_failure:
+    action: rollback_and_report
+    include_stdout_stderr: true
+
+example_flow:
+  - step: search_code
+    input:
+      query: "Where is Telegram migration validation evidence tracked?"
+  - step: read_snippet
+    input:
+      file: "security/evidence/2026-03-06-telegram-migration-and-rmf-validation.md"
+      start_line: 1
+      end_line: 80
+  - step: propose_patch
+    input:
+      change_request: "Add new RMF evidence entry for today's checks"
+      target_files:
+        - "security/evidence/2026-03-07-rmf-validation.md"
+  - step: apply_patch
+    requires_user_confirmation: true
